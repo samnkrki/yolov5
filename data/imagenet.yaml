@@ -153,4 +153,4 @@ names: ['tench', 'goldfish', 'great white shark', 'tiger shark', 'hammerhead sha
         'toilet paper']  # class names
 
 # Download script/URL (optional)
-download: data/scripts/get_imagenet.sh
+download: |pwd
