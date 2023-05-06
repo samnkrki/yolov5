@@ -69,8 +69,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     # Directories
     w = save_dir / 'weights'  # weights dir
+    v = save_dir / 'validations' # validations dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
     last, best = w / 'last.pt', w / 'best.pt'
+    v.mkdir(parents=True, exist_ok=True)
 
     # Hyperparameters
     if isinstance(hyp, str):
@@ -218,7 +220,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     # Process 0
     if RANK in {-1, 0}:
-        val_loader = create_dataloader(val_path,
+        val_loader, val_dataset = create_dataloader(val_path,
                                        imgsz,
                                        batch_size // WORLD_SIZE * 2,
                                        gs,
@@ -229,15 +231,17 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                        rank=-1,
                                        workers=workers * 2,
                                        pad=0.5,
-                                       prefix=colorstr('val: '))[0]
+                                       prefix=colorstr('val: '))
 
         if not resume:
             labels = np.concatenate(dataset.labels, 0)
+            val_labels = np.concatenate(val_dataset.labels, 0)
             # c = torch.tensor(labels[:, 0])  # classes
             # cf = torch.bincount(c.long(), minlength=nc) + 1.  # frequency
             # model._initialize_biases(cf.to(device))
             if plots:
                 plot_labels(labels, names, save_dir)
+                plot_labels(val_labels, names, save_dir=Path.joinpath(save_dir, "validations") )
 
             # Anchors
             if not opt.noautoanchor:
