@@ -1,4 +1,4 @@
-path: /Users/saminator/Documents/datasets/plates
+path: D:/datasets/plates
 train: train.txt  # train images (relative to 'path') 128 images
 val: test.txt  # val images (relative to 'path') 128 images
 # test: imageSets/Main/test.txt # test images (optional)
