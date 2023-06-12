@@ -1,0 +1,8 @@
+
+train: D:/datasets/potato_leaf_images/train.txt  # train images (relative to 'path') 128 images
+val: D:/datasets/potato_leaf_images/test.txt
+# val: /Users/saminator/Documents/datasets/plates/test.txt  # val images (relative to 'path') 128 images
+# test: imageSets/Main/test.txt # test images (optional)
+# Classes
+nc: 1  # number of classes
+names: ['disease']  # class names  # class names
