@@ -21,8 +21,10 @@ import pandas as pd
 import requests
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from PIL import Image
 from torch.cuda import amp
+import torchvision.ops as Tops
 
 from utils import TryExcept
 from utils.dataloaders import exif_transpose, letterbox
@@ -32,6 +34,37 @@ from utils.general import (LOGGER, ROOT, Profile, check_requirements, check_suff
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import copy_attr, smart_inference_mode
 
+import torch
+import torch.nn as nn
+import mmcv.ops
+
+class DeformableConv(nn.Module):
+    # Deformable convolution with args(ch_in, ch_out, kernel, stride, padding, dilation)
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1):
+        super().__init__()
+        self.conv_offset = nn.Conv2d(c1, 2 * k * k, kernel_size=k, stride=s, padding=p, dilation=d)
+        self.conv_dcn = mmcv.ops.DeformConv2d(c1, c2, k, s, p, d,groups=g)
+
+    def forward(self, x):
+        offset = self.conv_offset(x)
+        out = self.conv_dcn(x, offset)
+        # print(out)
+        return out
+
+class DefoConv(nn.Module):
+    default_act = nn.SiLU()
+    # Deformable convolution with BatchNorm and ReLU
+    def __init__(self, c1, c2, k=1, s=1, p=None,g=1, d=1, act=True):
+        super().__init__()
+        self.conv = DeformableConv(c1, c2, k, s, autopad(k, p, d),g, d)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
+
+    def forward(self, x):
+        out = self.conv(x)
+        out = self.bn(out)
+        out = self.act(out)
+        return out
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     # Pad to 'same' shape outputs
@@ -41,21 +74,27 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
 
-
 class Conv(nn.Module):
     # Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         super().__init__()
+        print('GROUPS', g)
+        print("in conv")
         self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False)
+        print("conv",c1, c2, k, s)
         self.bn = nn.BatchNorm2d(c2)
+        print("batch normal", c2)
         self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
+        print("activation",self.act)
 
     def forward(self, x):
+        # print(x.shape, "without fuse in conv")
         return self.act(self.bn(self.conv(x)))
 
     def forward_fuse(self, x):
+        # print(x.shape, "with fuse")
         return self.act(self.conv(x))
 
 
@@ -111,12 +150,34 @@ class Bottleneck(nn.Module):
     # Standard bottleneck
     def __init__(self, c1, c2, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, shortcut, groups, expansion
         super().__init__()
+        print("in bottleneck")
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
+        print('cv1', c1, c_, 1, 1)
         self.cv2 = Conv(c_, c2, 3, 1, g=g)
+        print('cv2', c_, c2, 3,1, g)
         self.add = shortcut and c1 == c2
+        print('add', self.add)
 
     def forward(self, x):
+        # print(x.shape)
+        return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+    
+class BottleneckDefo(nn.Module):
+    # Standard bottleneck
+    def __init__(self, c1, c2, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, shortcut, groups, expansion
+        super().__init__()
+        print("in bottleneck")
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = DefoConv(c1, c_, 1, 1)
+        print('cv1', c1, c_, 1, 1)
+        self.cv2 = DefoConv(c_, c2, 3, 1, g=g)
+        print('cv2', c_, c2, 3,1, g)
+        self.add = shortcut and c1 == c2
+        print('add', self.add)
+
+    def forward(self, x):
+        # print(x.shape)
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
 
 
@@ -157,13 +218,36 @@ class C3(nn.Module):
     # CSP Bottleneck with 3 convolutions
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
         super().__init__()
+        print("in c3")
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
+        print("cv1", c1, c_,1,1)
         self.cv2 = Conv(c1, c_, 1, 1)
-        self.cv3 = Conv(2 * c_, c2, 1)  # optional act=FReLU(c2)
+        print("cv2", c1, c_,1,1)
+        self.cv3 = Conv(2 * c_, c2, 1)
+        print("cv3", 2*c_, c2,1)  # optional act=FReLU(c2)
         self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
 
     def forward(self, x):
+        # print(x.shape)
+        return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+
+class C3Defo(nn.Module):
+    # CSP Bottleneck with 3 convolutions
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+        super().__init__()
+        print("in c3")
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = DefoConv(c1, c_, 1, 1)
+        print("cv1", c1, c_,1,1)
+        self.cv2 = DefoConv(c1, c_, 1, 1)
+        print("cv2", c1, c_,1,1)
+        self.cv3 = DefoConv(2 * c_, c2, 1)
+        print("cv3", 2*c_, c2,1)  # optional act=FReLU(c2)
+        self.m = nn.Sequential(*(BottleneckDefo(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
+
+    def forward(self, x):
+        # print(x.shape)
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
 
@@ -219,12 +303,17 @@ class SPPF(nn.Module):
     # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher
     def __init__(self, c1, c2, k=5):  # equivalent to SPP(k=(5, 9, 13))
         super().__init__()
+        print("in sppf")
         c_ = c1 // 2  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
+        print("cv1", c1, c_, 1, 1)
         self.cv2 = Conv(c_ * 4, c2, 1, 1)
+        print("cv2",c_ *4, c2,1,1 )
         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        print("max pool", k, "stride", 1, "padding", k//2)
 
     def forward(self, x):
+        # print(x.shape)
         x = self.cv1(x)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')  # suppress torch 1.9.0 max_pool2d() warning
@@ -237,10 +326,13 @@ class Focus(nn.Module):
     # Focus wh information into c-space
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):  # ch_in, ch_out, kernel, stride, padding, groups
         super().__init__()
+        print(c1, c2, k, s, p,g,act, "focus in cahnnel, outchannel, kernel, stride, padding")
+        print(c1*4, "in channel will be multiplied 4 times")
         self.conv = Conv(c1 * 4, c2, k, s, p, g, act=act)
         # self.contract = Contract(gain=2)
 
     def forward(self, x):  # x(b,c,w,h) -> y(b,4c,w/2,h/2)
+        # print(x.shape, "in focus")
         return self.conv(torch.cat((x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]), 1))
         # return self.conv(self.contract(x))
 
@@ -309,6 +401,7 @@ class Concat(nn.Module):
         self.d = dimension
 
     def forward(self, x):
+        # print(x.shape, "on concat")
         return torch.cat(x, self.d)
 
 
