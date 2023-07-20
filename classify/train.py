@@ -21,6 +21,7 @@ import time
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+import yaml
 
 import torch
 import torch.distributed as dist
@@ -29,6 +30,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 import torchvision
 from torch.cuda import amp
 from tqdm import tqdm
+# from torchsummary import summary
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[1]  # YOLOv5 root directory
@@ -47,10 +49,13 @@ from utils.plots import imshow_cls
 from utils.torch_utils import (ModelEMA, de_parallel, model_info, reshape_classifier_output, select_device, smart_DDP,
                                smart_optimizer, smartCrossEntropyLoss, torch_distributed_zero_first)
 
+from stopper import EarlyStopper
+
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 GIT_INFO = check_git_info()
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 
 def train(opt, device):
@@ -74,18 +79,31 @@ def train(opt, device):
     # Download Dataset
     with torch_distributed_zero_first(LOCAL_RANK), WorkingDirectory(ROOT):
         data_dir = data if data.is_dir() else (DATASETS_DIR / data)
+        print(DATASETS_DIR, data, data_dir.is_dir())
         if not data_dir.is_dir():
             LOGGER.info(f'\nDataset not found ⚠️, missing path {data_dir}, attempting download...')
             t = time.time()
             if str(data) == 'imagenet':
                 subprocess.run(['bash', str(ROOT / 'data/scripts/get_imagenet.sh')], shell=True, check=True)
             else:
-                url = f'https://github.com/ultralytics/yolov5/releases/download/v1.0/{data}.zip'
-                download(url, dir=data_dir.parent)
+                print(FILE.parents[1], data , 'root')
+                if str(data).split(".")[-1] == 'yaml':
+                    pass
+                    with open(Path(FILE.parents[1]  / data), "r") as stream:
+                        try:
+                            stream_data = yaml.safe_load(stream)
+                            data_dir = Path(stream_data['path'])
+                        except yaml.YAMLError as exc:
+                            print(exc, "could not open the yaml file for data")
+
+                else: 
+                    url = f'https://github.com/ultralytics/yolov5/releases/download/v1.0/{data}.zip'
+                    download(url, dir=data_dir.parent)
             s = f"Dataset download success ✅ ({time.time() - t:.1f}s), saved to {colorstr('bold', data_dir)}\n"
             LOGGER.info(s)
 
     # Dataloaders
+    print((data_dir / 'train').glob('*'))
     nc = len([x for x in (data_dir / 'train').glob('*') if x.is_dir()])  # number of classes
     trainloader = create_classification_dataloader(path=data_dir / 'train',
                                                    imgsz=imgsz,
@@ -159,6 +177,7 @@ def train(opt, device):
 
     # Train
     t0 = time.time()
+    early_stopper = EarlyStopper(patience=10, min_delta=0)
     criterion = smartCrossEntropyLoss(label_smoothing=opt.label_smoothing)  # loss function
     best_fitness = 0.0
     scaler = amp.GradScaler(enabled=cuda)
@@ -208,7 +227,7 @@ def train(opt, device):
                                                      criterion=criterion,
                                                      pbar=pbar)  # test accuracy, loss
                     fitness = top1  # define fitness as top1 accuracy
-
+                    
         # Scheduler
         scheduler.step()
 
@@ -246,6 +265,9 @@ def train(opt, device):
                 if best_fitness == fitness:
                     torch.save(ckpt, best)
                 del ckpt
+            if early_stopper.early_stop(vloss):       
+                print("stop this early")      
+                break
 
     # Train complete
     if RANK in {-1, 0} and final_epoch:
@@ -270,17 +292,17 @@ def train(opt, device):
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='yolov5s-cls.pt', help='initial weights path')
-    parser.add_argument('--data', type=str, default='imagenette160', help='cifar10, cifar100, mnist, imagenet, ...')
-    parser.add_argument('--epochs', type=int, default=10, help='total training epochs')
-    parser.add_argument('--batch-size', type=int, default=64, help='total batch size for all GPUs')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=224, help='train, val image size (pixels)')
+    parser.add_argument('--model', type=str, default='yolov5s.pt', help='initial weights path')
+    parser.add_argument('--data', type=str, default= ROOT /'data/pv.yaml', help='cifar10, cifar100, mnist, imagenet, ...')
+    parser.add_argument('--epochs', type=int, default=200, help='total training epochs')
+    parser.add_argument('--batch-size', type=int, default=12, help='total batch size for all GPUs')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
-    parser.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache images in "ram" (default) or "disk"')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--cache', type=str, nargs='?', const='ram', default='disk', help='--cache images in "ram" (default) or "disk"')
+    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--workers', type=int, default=8, help='max dataloader workers (per RANK in DDP mode)')
     parser.add_argument('--project', default=ROOT / 'runs/train-cls', help='save to project/name')
-    parser.add_argument('--name', default='exp', help='save to project/name')
+    parser.add_argument('--name', default='classify-exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--pretrained', nargs='?', const=True, default=True, help='start from i.e. --pretrained False')
     parser.add_argument('--optimizer', choices=['SGD', 'Adam', 'AdamW', 'RMSProp'], default='Adam', help='optimizer')
