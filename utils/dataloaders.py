@@ -116,7 +116,7 @@ def create_dataloader(path,
                       quad=False,
                       prefix='',
                       shuffle=False,
-                      seed=0):
+                      seed=0, selective_augmentation=False, augment_classes=[], include_classes=[]):
     if rect and shuffle:
         LOGGER.warning('WARNING ⚠️ --rect is incompatible with DataLoader shuffle, setting shuffle=False')
         shuffle = False
@@ -133,7 +133,11 @@ def create_dataloader(path,
             stride=int(stride),
             pad=pad,
             image_weights=image_weights,
-            prefix=prefix)
+            prefix=prefix,
+            selective_augmentation=selective_augmentation,
+            augment_classes=augment_classes,
+            include_classes=include_classes
+            )
 
     batch_size = min(batch_size, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
@@ -449,7 +453,7 @@ class LoadImagesAndLabels(Dataset):
                  stride=32,
                  pad=0.0,
                  min_items=0,
-                 prefix=''):
+                 prefix='',selective_augmentation=False, augment_classes=[], include_classes=[]):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -460,6 +464,9 @@ class LoadImagesAndLabels(Dataset):
         self.stride = stride
         self.path = path
         self.albumentations = Albumentations(size=img_size) if augment else None
+        self.augment_classes= augment_classes,
+        self.selective_augmentation = selective_augmentation,
+        self.include_classes = include_classes
 
         try:
             f = []  # image files
@@ -530,7 +537,7 @@ class LoadImagesAndLabels(Dataset):
         self.indices = range(n)
 
         # Update labels
-        include_class = [0,1,2,3,4,5,6,7]  # filter labels to include only these classes (optional)
+        include_class = self.include_classes  # filter labels to include only these classes (optional)
         self.segments = list(self.segments)
         include_class_array = np.array(include_class).reshape(1, -1)
         for i, (label, segment) in enumerate(zip(self.labels, self.segments)):
@@ -688,11 +695,18 @@ class LoadImagesAndLabels(Dataset):
                                                  perspective=hyp['perspective'])
 
         nl = len(labels)  # number of labels
+        if(self.selective_augmentation == True):
+            augment_classes = self.augment_classes
+            self.augment = False
+            if(len(labels[0])>0 and len(augment_classes)>0 and int(labels[0][0]) in augment_classes):
+                self.augment = True
+                print("hami eta chama")
         if nl:
             labels[:, 1:5] = xyxy2xywhn(labels[:, 1:5], w=img.shape[1], h=img.shape[0], clip=True, eps=1E-3)
 
         if self.augment:
             # Albumentations
+            print(img, labels, "image with labels")
             img, labels = self.albumentations(img, labels)
             nl = len(labels)  # update after albumentations
 
