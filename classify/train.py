@@ -127,6 +127,11 @@ def train(opt, device):
     with torch_distributed_zero_first(LOCAL_RANK), WorkingDirectory(ROOT):
         if Path(opt.model).is_file() or opt.model.endswith('.pt'):
             model = attempt_load(opt.model, device='cpu', fuse=False)
+        elif Path(opt.model).is_file() or opt.model.endswith('.yaml'):
+            file_name =f'yolov5m.yaml'
+            # cfg = list((Path(__file__).parent / 'models').rglob(file_name))[0]  # model.yaml path
+            print((Path(__file__).parent.parent / 'models/yolov5m.yaml'), "here cimes the path")
+            model = DetectionModel(Path(__file__).parent.parent / 'models/yolov5m.yaml', ch=3, nc=1) 
         elif opt.model in torchvision.models.__dict__:  # TorchVision models i.e. resnet50, efficientnet_b0
             model = torchvision.models.__dict__[opt.model](weights='IMAGENET1K_V1' if pretrained else None)
         else:
@@ -292,14 +297,14 @@ def train(opt, device):
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='yolov5s.pt', help='initial weights path')
-    parser.add_argument('--data', type=str, default= ROOT /'data/pv.yaml', help='cifar10, cifar100, mnist, imagenet, ...')
+    parser.add_argument('--model', type=str, default='yolov5s.yaml', help='initial weights path')
+    parser.add_argument('--data', type=str, default= ROOT /'data/plates-cl.yaml', help='cifar10, cifar100, mnist, imagenet, ...')
     parser.add_argument('--epochs', type=int, default=200, help='total training epochs')
     parser.add_argument('--batch-size', type=int, default=12, help='total batch size for all GPUs')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
     parser.add_argument('--cache', type=str, nargs='?', const='ram', default='disk', help='--cache images in "ram" (default) or "disk"')
-    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--workers', type=int, default=8, help='max dataloader workers (per RANK in DDP mode)')
     parser.add_argument('--project', default=ROOT / 'runs/train-cls', help='save to project/name')
     parser.add_argument('--name', default='classify-exp', help='save to project/name')
