@@ -1,0 +1,52 @@
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+# path: /media/samin/MadRabbit/datasets/tomato_disease # dataset root dir
+path: D:\\datasets\\my_leaf_dataset\\capsicum
+# path: /Users/saminator/Documents/datasets/tomato_disease
+# train: train.txt  # train images (relative to 'path') 128 images
+# val: test.txt  # val images (relative to 'path') 128 images
+# test: imageSets/Main/test.txt # test images (optional)
+train: train.txt
+val: val.txt
+# Classes
+# nc: 10  # number of classes
+# names: ['plague','canker','gmold','miner','lmold','wfly','ltemp','powder','nutrex','back']  # class names
+# names: ['plague','canker','gmold','miner','lmold','wfly','ltemp','powder','nutrex']
+# path: /Users/saminator/Documents/datasets/plates
+
+# train: D:/datasets/tomato_disease/train.txt  # train images (relative to 'path') 128 images
+# val: D:/datasets/tomato_disease/test.txt
+# val: /Users/saminator/Documents/datasets/plates/test.txt  # val images (relative to 'path') 128 images
+# test: imageSets/Main/test.txt # test images (optional)
+# Classes
+nc: 36  # number of classes
+names: ['LB',
+'BLS',
+'LS',
+'ND',
+'INS',
+'LCV',
+'CLS',
+'CEB',
+'A',
+'EB',
+'MV',
+'WW',
+'LB-A',
+'BS',
+'BLS-MV',
+'PM',
+'PLB',
+'LCV-MV',
+'CLCV',
+'CBS',
+'CMV',
+'CLB',
+'FW',
+'BLS-ND',
+'CLV',
+'SWV',
+'BLS-LCV',
+'W',
+'CA',
+'PD',
+'CYV']  # class names  # class names
