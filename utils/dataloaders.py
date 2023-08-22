@@ -706,7 +706,7 @@ class LoadImagesAndLabels(Dataset):
 
         if self.augment:
             # Albumentations
-            print(img, labels, "image with labels")
+            # print(img, labels, "image with labels")
             img, labels = self.albumentations(img, labels)
             nl = len(labels)  # update after albumentations
 
@@ -1194,6 +1194,7 @@ class ClassificationDataset(torchvision.datasets.ImageFolder):
         self.cache_ram = cache is True or cache == 'ram'
         self.cache_disk = cache == 'disk'
         self.samples = [list(x) + [Path(x[0]).with_suffix('.npy'), None] for x in self.samples]  # file, index, npy, im
+        print(self.cache_ram, "ram cache")
 
     def __getitem__(self, i):
         f, j, fn, im = self.samples[i]  # filename, index, filename.with_suffix('.npy'), image
