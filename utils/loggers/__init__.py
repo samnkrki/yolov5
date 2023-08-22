@@ -156,10 +156,15 @@ class Loggers():
         if self.comet_logger:
             self.comet_logger.on_pretrain_routine_start()
 
-    def on_pretrain_routine_end(self, labels, names):
+    def on_pretrain_routine_end(self, labels, names, val=None):
         # Callback runs on pre-train routine end
         if self.plots:
-            plot_labels(labels, names, self.save_dir)
+            if val:
+                os.mkdir(self.save_dir / val)
+                plot_labels(labels, names, self.save_dir / val)
+            else: 
+                plot_labels(labels, names, self.save_dir)
+            print('names', names)
             paths = self.save_dir.glob('*labels*.jpg')  # training labels
             if self.wandb:
                 self.wandb.log({'Labels': [wandb.Image(str(x), caption=x.name) for x in paths]})
