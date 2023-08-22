@@ -203,7 +203,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                               quad=opt.quad,
                                               prefix=colorstr('train: '),
                                               shuffle=True,
-                                              seed=opt.seed)
+                                              seed=opt.seed,
+                                              selective_augmentation=opt.selective_augmentation,
+                                              augment_classes=opt.augment_classes,
+                                              include_classes=opt.include_class,)
     labels = np.concatenate(dataset.labels, 0)
     
     mlc = int(labels[:, 0].max())  # max label class
@@ -222,7 +225,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                        rank=-1,
                                        workers=workers * 2,
                                        pad=0.5,
-                                       prefix=colorstr('val: '))
+                                       prefix=colorstr('val: '),
+                                       selective_augmentation=opt.selective_augmentation,
+                                       augment_classes=opt.augment_classes,
+                                       include_classes=opt.include_class,)
 
         if not resume:
             if not opt.noautoanchor:
@@ -231,7 +237,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         callbacks.run('on_pretrain_routine_end', labels, names)
         val_labels = np.concatenate(val_dataset.labels, 0)
-        callbacks.run('on_pretrain_routine_end', val_labels, names)
+        callbacks.run('on_pretrain_routine_end', val_labels, names,"validation")
 
     # DDP mode
     if cuda and RANK != -1:
