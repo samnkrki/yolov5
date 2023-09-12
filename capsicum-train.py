@@ -226,7 +226,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                        rank=-1,
                                        workers=workers * 2,
                                        pad=0.5,
-                                       prefix=colorstr('val: '))
+                                       prefix=colorstr('val: '),                                              
+                                       selective_augmentation=opt.selective_augmentation,
+                                       augment_classes=opt.augment_classes,
+                                       include_classes=opt.include_class,)
 
         if not resume:
             if not opt.noautoanchor:

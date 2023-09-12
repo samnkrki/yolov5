@@ -480,9 +480,9 @@ def parse_opt(known=False):
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--seed', type=int, default=0, help='Global training seed')
     parser.add_argument('--local_rank', type=int, default=-1, help='Automatic DDP Multi-GPU argument, do not modify')
-    parser.add_argument('--include-class', type=list, default=[0,1,9], help='Add only those classes that you need on detection')
+    parser.add_argument('--include-class', type=list, default=[0,1], help='Add only those classes that you need on detection')
     parser.add_argument('--selective-augmentation', type=bool, default=True, help='To augment only classes with less data')
-    parser.add_argument('--augment-classes', type=list, default=[], help='list of classes to augment')
+    parser.add_argument('--augment-classes', type=list, default=[0,1], help='list of classes to augment')
 
     # Weights & Biases arguments
     parser.add_argument('--entity', default=None, help='W&B: Entity')
