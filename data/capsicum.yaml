@@ -2,15 +2,15 @@
 # path: /media/samin/MadRabbit/datasets/tomato_disease # dataset root dir
 path: D:\\datasets\\my_leaf_dataset\\capsicum
 # path: /Users/saminator/Documents/datasets/tomato_disease
-train: train.txt  # train images (relative to 'path') 128 images
-val: val.txt  # val images (relative to 'path') 128 images
+train: train_split_capsicum.txt  # train images (relative to 'path') 128 images
+val: val_split_capsicum.txt  # val images (relative to 'path') 128 images
 # test: imageSets/Main/test.txt # test images (optional)
 # path: D:\\datasets\\my_leaf_dataset\\capsicum
 # train: train_1280
 # val: val_1280
 # Classes
 # Classes
-nc: 31  # number of classes
+nc: 21  # number of classes
 names: [
 'LB',
 'BLS',
@@ -18,28 +18,19 @@ names: [
 'ND',
 'INS',
 'LCV',
-'CLS',
-'CEB',
-'A',
 'EB',
+'A',
 'MV',
-'WW',
 'LB-A',
 'BS',
 'BLS-MV',
 'PM',
-'PLB',
 'LCV-MV',
-'CLCV',
-'CBS',
-'CMV',
-'CLB',
+'MV',
 'FW',
 'BLS-ND',
 'CLV',
 'SWV',
+'PM-LCV',
 'BLS-LCV',
-'W',
-'CA',
-'PD',
 'CYV']  # class names  # class names
